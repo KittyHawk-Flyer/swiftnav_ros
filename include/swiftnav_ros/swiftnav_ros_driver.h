@@ -136,6 +136,8 @@ namespace swiftnav_ros
 		ros::Publisher llh_pub;
 		ros::Publisher rtk_pub;
 		ros::Publisher time_pub;
+        ros::Publisher baseline_pub;
+        ros::Publisher vel_pub;
 
         // Diagnostic Data
 		unsigned int io_failure_count;

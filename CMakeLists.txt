@@ -4,7 +4,7 @@ project(swiftnav_ros)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS diagnostic_updater roscpp sensor_msgs std_srvs std_msgs)
+find_package(catkin REQUIRED COMPONENTS diagnostic_updater roscpp sensor_msgs std_srvs std_msgs kitty_common)
 
 ## System dependencies are found with CMake's conventions
 #find_package(swiftnav REQUIRED)
@@ -88,6 +88,7 @@ target_link_libraries(swiftnav_ros_driver
 target_link_libraries(swiftnav_ros_node
   swiftnav_ros_driver
   ${catkin_LIBRARIES}
+  kitty_common
 )
 
 #############

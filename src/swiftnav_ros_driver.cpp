@@ -10,6 +10,9 @@
 #include <ros/time.h>
 #include <tf/tf.h>
 
+#include "kitty_common/GPSBaseline.h"
+#include "kitty_common/GPSVelocity.h"
+
 namespace swiftnav_ros {
     PIKSI::PIKSI(const ros::NodeHandle &_nh,
                  const ros::NodeHandle &_nh_priv,
@@ -111,6 +114,8 @@ namespace swiftnav_ros {
         llh_pub = nh.advertise<sensor_msgs::NavSatFix>("gps/fix", 1);
         rtk_pub = nh.advertise<nav_msgs::Odometry>("gps/rtkfix", 1);
         time_pub = nh.advertise<sensor_msgs::TimeReference>("gps/time", 1);
+        baseline_pub = nh.advertise<kitty_common::GPSBaseline>("gps/baseline", 1);
+        vel_pub = nh.advertise<kitty_common::GPSVelocity>("gps/velocity", 1);
 
         return true;
     }
@@ -250,66 +255,85 @@ namespace swiftnav_ros {
         driver->rtk_status = sbp_ned.flags;
 
         if ((sbp_ned.flags & 0x7) != 0) {
-            nav_msgs::OdometryPtr rtk_odom_msg(new nav_msgs::Odometry);
 
-            rtk_odom_msg->header.frame_id = driver->frame_id;
-            // For best accuracy, header.stamp should maybe get tow converted to ros::Time
-            rtk_odom_msg->header.stamp = ros::Time::now();
+            kitty_common::GPSBaseline gps_baseline;
 
-            // convert to meters from mm, and NED to ENU
-            rtk_odom_msg->pose.pose.position.x = sbp_ned.e / 1000.0;
-            rtk_odom_msg->pose.pose.position.y = sbp_ned.n / 1000.0;
-            rtk_odom_msg->pose.pose.position.z = -sbp_ned.d / 1000.0;
+            gps_baseline.header.frame_id = driver->frame_id;
+            gps_baseline.header.stamp = ros::Time::now();
 
-            // Set orientation to 0; GPS doesn't provide orientation
-            rtk_odom_msg->pose.pose.orientation.x = 0;
-            rtk_odom_msg->pose.pose.orientation.y = 0;
-            rtk_odom_msg->pose.pose.orientation.z = 0;
-            rtk_odom_msg->pose.pose.orientation.w = 0;
+            gps_baseline.time_of_week = sbp_ned.tow;
+            gps_baseline.n = sbp_ned.n / 1000.0;
+            gps_baseline.e = sbp_ned.e / 1000.0;
+            gps_baseline.d = sbp_ned.d / 1000.0;
+            gps_baseline.h_accuracy = sbp_ned.h_accuracy / 1000.0;
+            gps_baseline.v_accuracy = sbp_ned.v_accuracy / 1000.0;
+            gps_baseline.n_sats = sbp_ned.n_sats;
 
-            // populate the pose covariance matrix if we have a good fix
-            double h_covariance = (sbp_ned.h_accuracy * sbp_ned.h_accuracy) / 1.0e-6;
-            double v_covariance = (sbp_ned.v_accuracy * sbp_ned.v_accuracy) / 1.0e-6;
+            // pull off bits 0, 1, and 2 for the flags
+            gps_baseline.fix_mode = sbp_ned.flags & 0b111;
 
-            // Pose x/y/z covariance
-            rtk_odom_msg->pose.covariance[0] = h_covariance;   // x = 0, 0 in the 6x6 cov matrix
-            rtk_odom_msg->pose.covariance[7] = h_covariance;   // y = 1, 1
-            rtk_odom_msg->pose.covariance[14] = v_covariance;  // z = 2, 2
+            driver->baseline_pub.publish(gps_baseline);
 
-            // default angular pose to unknown
-            rtk_odom_msg->pose.covariance[21] = 1.0e3;  // x rotation = 3, 3
-            rtk_odom_msg->pose.covariance[28] = 1.0e3;  // y rotation = 4, 4
-            rtk_odom_msg->pose.covariance[35] = 1.0e3;  // z rotation = 5, 5
-
-            // Populate linear part of Twist with last velocity reported: by vel_ned_callback
-            rtk_odom_msg->twist.twist.linear.x = driver->rtk_vel_east;
-            rtk_odom_msg->twist.twist.linear.y = driver->rtk_vel_north;
-            rtk_odom_msg->twist.twist.linear.z = driver->rtk_vel_up;
-
-            // Set angular velocity to 0 - GPS doesn't provide angular velocity
-            rtk_odom_msg->twist.twist.angular.x = 0;
-            rtk_odom_msg->twist.twist.angular.y = 0;
-            rtk_odom_msg->twist.twist.angular.z = 0;
-
-            // set up the Twist covariance matrix
-            // FIXME: I don't know what the covariance of linear velocity should be.
-            // 12/19 asked on swiftnav google group
-            // GPS doesn't provide rotationl velocity
-            rtk_odom_msg->twist.covariance[0] = driver->rtk_vel_h_covariance;   // x velocity = 0, 0 in the 6x6 cov matrix
-            rtk_odom_msg->twist.covariance[7] = driver->rtk_vel_h_covariance;   // y velocity = 1, 1
-            rtk_odom_msg->twist.covariance[14] = driver->rtk_vel_v_covariance;   // z velocity = 2, 2
-            rtk_odom_msg->twist.covariance[21] = 1.0e3;  // x rotational velocity = 3, 3
-            rtk_odom_msg->twist.covariance[28] = 1.0e3;  // y rotational velocity = 4, 4
-            rtk_odom_msg->twist.covariance[35] = 1.0e3;  // z rotational velocity = 5, 5
-
-            driver->rtk_pub.publish(rtk_odom_msg);
-
-            driver->num_rtk_satellites = sbp_ned.n_sats;
-            driver->rtk_north = rtk_odom_msg->pose.pose.position.x;
-            driver->rtk_east = rtk_odom_msg->pose.pose.position.y;
-            driver->rtk_height = rtk_odom_msg->pose.pose.position.z;
-            driver->rtk_h_accuracy = sbp_ned.h_accuracy / 1000.0;
-            driver->rtk_v_accuracy = sbp_ned.v_accuracy / 1000.0;
+//            nav_msgs::OdometryPtr rtk_odom_msg(new nav_msgs::Odometry);
+//
+//            rtk_odom_msg->header.frame_id = driver->frame_id;
+//            // For best accuracy, header.stamp should maybe get tow converted to ros::Time
+//            rtk_odom_msg->header.stamp = ros::Time::now();
+//
+//            // convert to meters from mm, and NED to ENU
+//            rtk_odom_msg->pose.pose.position.x = sbp_ned.e / 1000.0;
+//            rtk_odom_msg->pose.pose.position.y = sbp_ned.n / 1000.0;
+//            rtk_odom_msg->pose.pose.position.z = -sbp_ned.d / 1000.0;
+//
+//            // Set orientation to 0; GPS doesn't provide orientation
+//            rtk_odom_msg->pose.pose.orientation.x = 0;
+//            rtk_odom_msg->pose.pose.orientation.y = 0;
+//            rtk_odom_msg->pose.pose.orientation.z = 0;
+//            rtk_odom_msg->pose.pose.orientation.w = 0;
+//
+//            // populate the pose covariance matrix if we have a good fix
+//            double h_covariance = (sbp_ned.h_accuracy * sbp_ned.h_accuracy) / 1.0e-6;
+//            double v_covariance = (sbp_ned.v_accuracy * sbp_ned.v_accuracy) / 1.0e-6;
+//
+//            // Pose x/y/z covariance
+//            rtk_odom_msg->pose.covariance[0] = h_covariance;   // x = 0, 0 in the 6x6 cov matrix
+//            rtk_odom_msg->pose.covariance[7] = h_covariance;   // y = 1, 1
+//            rtk_odom_msg->pose.covariance[14] = v_covariance;  // z = 2, 2
+//
+//            // default angular pose to unknown
+//            rtk_odom_msg->pose.covariance[21] = 1.0e3;  // x rotation = 3, 3
+//            rtk_odom_msg->pose.covariance[28] = 1.0e3;  // y rotation = 4, 4
+//            rtk_odom_msg->pose.covariance[35] = 1.0e3;  // z rotation = 5, 5
+//
+//            // Populate linear part of Twist with last velocity reported: by vel_ned_callback
+//            rtk_odom_msg->twist.twist.linear.x = driver->rtk_vel_east;
+//            rtk_odom_msg->twist.twist.linear.y = driver->rtk_vel_north;
+//            rtk_odom_msg->twist.twist.linear.z = driver->rtk_vel_up;
+//
+//            // Set angular velocity to 0 - GPS doesn't provide angular velocity
+//            rtk_odom_msg->twist.twist.angular.x = 0;
+//            rtk_odom_msg->twist.twist.angular.y = 0;
+//            rtk_odom_msg->twist.twist.angular.z = 0;
+//
+//            // set up the Twist covariance matrix
+//            // FIXME: I don't know what the covariance of linear velocity should be.
+//            // 12/19 asked on swiftnav google group
+//            // GPS doesn't provide rotationl velocity
+//            rtk_odom_msg->twist.covariance[0] = driver->rtk_vel_h_covariance;   // x velocity = 0, 0 in the 6x6 cov matrix
+//            rtk_odom_msg->twist.covariance[7] = driver->rtk_vel_h_covariance;   // y velocity = 1, 1
+//            rtk_odom_msg->twist.covariance[14] = driver->rtk_vel_v_covariance;   // z velocity = 2, 2
+//            rtk_odom_msg->twist.covariance[21] = 1.0e3;  // x rotational velocity = 3, 3
+//            rtk_odom_msg->twist.covariance[28] = 1.0e3;  // y rotational velocity = 4, 4
+//            rtk_odom_msg->twist.covariance[35] = 1.0e3;  // z rotational velocity = 5, 5
+//
+//            driver->rtk_pub.publish(rtk_odom_msg);
+//
+//            driver->num_rtk_satellites = sbp_ned.n_sats;
+//            driver->rtk_north = rtk_odom_msg->pose.pose.position.x;
+//            driver->rtk_east = rtk_odom_msg->pose.pose.position.y;
+//            driver->rtk_height = rtk_odom_msg->pose.pose.position.z;
+//            driver->rtk_h_accuracy = sbp_ned.h_accuracy / 1000.0;
+//            driver->rtk_v_accuracy = sbp_ned.v_accuracy / 1000.0;
         }
         return;
     }
@@ -326,14 +350,23 @@ namespace swiftnav_ros {
 
         msg_vel_ned_t sbp_vel = *(msg_vel_ned_t *) msg;
 
-        // save velocity in the Twist member of a private Odometry msg, from where it
-        // will be pulled to populate a published Odometry msg next time a
-        // msg_baseline_ned_t message is received
-        driver->rtk_vel_north = sbp_vel.n / 1000.0;
-        driver->rtk_vel_east = sbp_vel.e / 1000.0;
-        driver->rtk_vel_up = -sbp_vel.d / 1000.0;
-        driver->rtk_vel_h_covariance = (sbp_vel.h_accuracy * sbp_vel.h_accuracy) * 10e-6;
-        driver->rtk_vel_v_covariance = (sbp_vel.v_accuracy * sbp_vel.h_accuracy) * 10e-6;
+        kitty_common::GPSVelocity gps_velocity;
+
+        gps_velocity.header.frame_id = driver->frame_id;
+        gps_velocity.header.stamp = ros::Time::now();
+
+        gps_velocity.time_of_week = sbp_vel.tow;
+        gps_velocity.n = sbp_vel.n / 1000.0;
+        gps_velocity.e = sbp_vel.e / 1000.0;
+        gps_velocity.d = sbp_vel.d / 1000.0;
+        gps_velocity.h_accuracy = sbp_vel.h_accuracy / 1000.0;
+        gps_velocity.v_accuracy = sbp_vel.v_accuracy / 1000.0;
+        gps_velocity.n_sats = sbp_vel.n_sats;
+
+        // pull off bits 0, 1, and 2 for the flags
+        gps_velocity.compute_mode = sbp_vel.flags & 0b111;
+
+        driver->vel_pub.publish(gps_velocity);
 
         return;
     }
