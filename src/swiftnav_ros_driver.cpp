@@ -2,13 +2,8 @@
 #include <libsbp/system.h>
 #include <libsbp/navigation.h>
 
-#include <iomanip>
-
 #include <sensor_msgs/NavSatFix.h>
-#include <sensor_msgs/NavSatStatus.h>
 #include <sensor_msgs/TimeReference.h>
-#include <ros/time.h>
-#include <tf/tf.h>
 
 #include "kitty_common/GPSBaseline.h"
 #include "kitty_common/GPSVelocity.h"
@@ -105,14 +100,11 @@ namespace swiftnav_ros {
         sbp_register_callback(&state, SBP_MSG_HEARTBEAT, &heartbeat_callback, (void *) this, &heartbeat_callback_node);
         sbp_register_callback(&state, SBP_MSG_GPS_TIME, &time_callback, (void *) this, &time_callback_node);
         sbp_register_callback(&state, SBP_MSG_POS_LLH, &pos_llh_callback, (void *) this, &pos_llh_callback_node);
-//		sbp_register_callback(&state, SBP_BASELINE_ECEF, &baseline_ecefCallback, (void*) this, &baseline_ecef_callback_node);
         sbp_register_callback(&state, SBP_MSG_BASELINE_NED, &baseline_ned_callback, (void *) this,
                               &baseline_ned_callback_node);
-//		sbp_register_callback(&state, SBP_VEL_ECEF, &vel_ecefCallback, (void*) this, &vel_ecef_callback_node);
         sbp_register_callback(&state, SBP_MSG_VEL_NED, &vel_ned_callback, (void *) this, &vel_ned_callback_node);
 
         llh_pub = nh.advertise<sensor_msgs::NavSatFix>("gps/fix", 1);
-        rtk_pub = nh.advertise<nav_msgs::Odometry>("gps/rtkfix", 1);
         time_pub = nh.advertise<sensor_msgs::TimeReference>("gps/time", 1);
         baseline_pub = nh.advertise<kitty_common::GPSBaseline>("gps/baseline", 1);
         vel_pub = nh.advertise<kitty_common::GPSVelocity>("gps/velocity", 1);
@@ -140,33 +132,29 @@ namespace swiftnav_ros {
 
     void heartbeat_callback(u16 sender_id, u8 len, u8 msg[], void *context) {
         if (context == NULL) {
-            std::cerr << "Critical Error: Pisk SBP driver heartbeat context void." << std::endl;
+            ROS_ERROR_STREAM("Critical Error: Pisk SBP driver heartbeat context void.");
             return;
         }
 
         msg_heartbeat_t hb = *(msg_heartbeat_t *) msg;
-
-        std::cout << "got heartbeat message!" << std::endl;
 
         class PIKSI *driver = (class PIKSI *) context;
         driver->heartbeat_pub_freq.tick();
         driver->heartbeat_flags |= (hb.flags & 0x7);    // accumulate errors for diags
         driver->sbp_protocol_version = (hb.flags & 0xFF0000) >> 16;
         if (driver->sbp_protocol_version < 2) {
-            std::cerr << "SBP Major protocol version mismatch. "
+            ROS_ERROR_STREAM("SBP Major protocol version mismatch. "
                     "Driver compatible with 2.0 and later. Version "
-                      << driver->sbp_protocol_version << driver->heartbeat_flags << " detected." << std::endl;
+                      << driver->sbp_protocol_version << driver->heartbeat_flags << " detected.");
             return;
         }
     }
 
     void time_callback(u16 sender_id, u8 len, u8 msg[], void *context) {
         if (context == NULL) {
-            std::cerr << "Critical Error: Pisk SBP driver time context void." << std::endl;
+            ROS_ERROR_STREAM("Critical Error: Pisk SBP driver time context void.");
             return;
         }
-
-        std::cout << "got time message!" << std::endl;
 
         class PIKSI *driver = (class PIKSI *) context;
 
@@ -184,17 +172,14 @@ namespace swiftnav_ros {
             driver->time_pub.publish(time_msg);
         }
 
-
         return;
     }
 
     void pos_llh_callback(u16 sender_id, u8 len, u8 msg[], void *context) {
         if (context == NULL) {
-            std::cerr << "Critical Error: Pisk SBP driver pos_llh context void." << std::endl;
+            ROS_ERROR_STREAM("Critical Error: Pisk SBP driver pos_llh context void.");
             return;
         }
-
-        std::cout << "got pos_llh message!" << std::endl;
 
         class PIKSI *driver = (class PIKSI *) context;
 
@@ -238,11 +223,8 @@ namespace swiftnav_ros {
     }
 
     void baseline_ned_callback(u16 sender_id, u8 len, u8 msg[], void *context) {
-
-        std::cout << "got baseline_ned message!" << std::endl;
-
         if (context == NULL) {
-            std::cerr << "Critical Error: Pisk SBP driver baseline context void." << std::endl;
+            ROS_ERROR_STREAM("Critical Error: Pisk SBP driver baseline context void.");
             return;
         }
 
@@ -273,78 +255,15 @@ namespace swiftnav_ros {
             gps_baseline.fix_mode = sbp_ned.flags & 0b111;
 
             driver->baseline_pub.publish(gps_baseline);
-
-//            nav_msgs::OdometryPtr rtk_odom_msg(new nav_msgs::Odometry);
-//
-//            rtk_odom_msg->header.frame_id = driver->frame_id;
-//            // For best accuracy, header.stamp should maybe get tow converted to ros::Time
-//            rtk_odom_msg->header.stamp = ros::Time::now();
-//
-//            // convert to meters from mm, and NED to ENU
-//            rtk_odom_msg->pose.pose.position.x = sbp_ned.e / 1000.0;
-//            rtk_odom_msg->pose.pose.position.y = sbp_ned.n / 1000.0;
-//            rtk_odom_msg->pose.pose.position.z = -sbp_ned.d / 1000.0;
-//
-//            // Set orientation to 0; GPS doesn't provide orientation
-//            rtk_odom_msg->pose.pose.orientation.x = 0;
-//            rtk_odom_msg->pose.pose.orientation.y = 0;
-//            rtk_odom_msg->pose.pose.orientation.z = 0;
-//            rtk_odom_msg->pose.pose.orientation.w = 0;
-//
-//            // populate the pose covariance matrix if we have a good fix
-//            double h_covariance = (sbp_ned.h_accuracy * sbp_ned.h_accuracy) / 1.0e-6;
-//            double v_covariance = (sbp_ned.v_accuracy * sbp_ned.v_accuracy) / 1.0e-6;
-//
-//            // Pose x/y/z covariance
-//            rtk_odom_msg->pose.covariance[0] = h_covariance;   // x = 0, 0 in the 6x6 cov matrix
-//            rtk_odom_msg->pose.covariance[7] = h_covariance;   // y = 1, 1
-//            rtk_odom_msg->pose.covariance[14] = v_covariance;  // z = 2, 2
-//
-//            // default angular pose to unknown
-//            rtk_odom_msg->pose.covariance[21] = 1.0e3;  // x rotation = 3, 3
-//            rtk_odom_msg->pose.covariance[28] = 1.0e3;  // y rotation = 4, 4
-//            rtk_odom_msg->pose.covariance[35] = 1.0e3;  // z rotation = 5, 5
-//
-//            // Populate linear part of Twist with last velocity reported: by vel_ned_callback
-//            rtk_odom_msg->twist.twist.linear.x = driver->rtk_vel_east;
-//            rtk_odom_msg->twist.twist.linear.y = driver->rtk_vel_north;
-//            rtk_odom_msg->twist.twist.linear.z = driver->rtk_vel_up;
-//
-//            // Set angular velocity to 0 - GPS doesn't provide angular velocity
-//            rtk_odom_msg->twist.twist.angular.x = 0;
-//            rtk_odom_msg->twist.twist.angular.y = 0;
-//            rtk_odom_msg->twist.twist.angular.z = 0;
-//
-//            // set up the Twist covariance matrix
-//            // FIXME: I don't know what the covariance of linear velocity should be.
-//            // 12/19 asked on swiftnav google group
-//            // GPS doesn't provide rotationl velocity
-//            rtk_odom_msg->twist.covariance[0] = driver->rtk_vel_h_covariance;   // x velocity = 0, 0 in the 6x6 cov matrix
-//            rtk_odom_msg->twist.covariance[7] = driver->rtk_vel_h_covariance;   // y velocity = 1, 1
-//            rtk_odom_msg->twist.covariance[14] = driver->rtk_vel_v_covariance;   // z velocity = 2, 2
-//            rtk_odom_msg->twist.covariance[21] = 1.0e3;  // x rotational velocity = 3, 3
-//            rtk_odom_msg->twist.covariance[28] = 1.0e3;  // y rotational velocity = 4, 4
-//            rtk_odom_msg->twist.covariance[35] = 1.0e3;  // z rotational velocity = 5, 5
-//
-//            driver->rtk_pub.publish(rtk_odom_msg);
-//
-//            driver->num_rtk_satellites = sbp_ned.n_sats;
-//            driver->rtk_north = rtk_odom_msg->pose.pose.position.x;
-//            driver->rtk_east = rtk_odom_msg->pose.pose.position.y;
-//            driver->rtk_height = rtk_odom_msg->pose.pose.position.z;
-//            driver->rtk_h_accuracy = sbp_ned.h_accuracy / 1000.0;
-//            driver->rtk_v_accuracy = sbp_ned.v_accuracy / 1000.0;
         }
         return;
     }
 
     void vel_ned_callback(u16 sender_id, u8 len, u8 msg[], void *context) {
         if (context == NULL) {
-            std::cerr << "Critical Error: Pisk SBP driver vel_ned context void." << std::endl;
+            ROS_ERROR_STREAM("Critical Error: Pisk SBP driver vel_ned context void.");
             return;
         }
-
-        std::cout << "got vel_ned message!" << std::endl;
 
         class PIKSI *driver = (class PIKSI *) context;
 
