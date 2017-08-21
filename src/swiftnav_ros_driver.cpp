@@ -144,8 +144,8 @@ namespace swiftnav_ros {
         driver->sbp_protocol_version = (hb.flags & 0xFF0000) >> 16;
         if (driver->sbp_protocol_version < 2) {
             ROS_ERROR_STREAM("SBP Major protocol version mismatch. "
-                    "Driver compatible with 2.0 and later. Version "
-                      << driver->sbp_protocol_version << driver->heartbeat_flags << " detected.");
+                                     "Driver compatible with 2.0 and later. Version "
+                                     << driver->sbp_protocol_version << driver->heartbeat_flags << " detected.");
             return;
         }
     }
@@ -161,6 +161,8 @@ namespace swiftnav_ros {
         msg_gps_time_t time = *(msg_gps_time_t *) msg;
         if ((time.flags & 0x7) != 0) {
 
+            ROS_DEBUG_STREAM("Got a Piksi Multi time message");
+
             sensor_msgs::TimeReferencePtr time_msg(new sensor_msgs::TimeReference);
 
             time_msg->header.frame_id = driver->frame_id;
@@ -170,7 +172,11 @@ namespace swiftnav_ros {
             time_msg->source = "gps";
 
             driver->time_pub.publish(time_msg);
+        } else {
+            ROS_DEBUG_STREAM("Problem: Got a Piksi Multi time message with a bad time flag");
         }
+
+
 
         return;
     }
@@ -190,6 +196,8 @@ namespace swiftnav_ros {
         driver->llh_status |= llh.flags;
 
         if ((llh.flags & 0x7) != 0) {
+
+            ROS_DEBUG_STREAM("Got a Piksi Multi llh message");
 
             sensor_msgs::NavSatFixPtr llh_msg(new sensor_msgs::NavSatFix);
 
@@ -218,6 +226,8 @@ namespace swiftnav_ros {
             driver->llh_height = llh.height;
             driver->llh_h_accuracy = llh.h_accuracy / 1000.0;
             driver->llh_v_accuracy = llh.v_accuracy / 1000.0;
+        } else {
+            ROS_DEBUG_STREAM("Problem: Got a Piksi Multi llh message with a bad time flag");
         }
         return;
     }
@@ -238,6 +248,8 @@ namespace swiftnav_ros {
 
         if ((sbp_ned.flags & 0x7) != 0) {
 
+            ROS_DEBUG_STREAM("Got a Piksi Multi ned message");
+
             kitty_common::GPSBaseline gps_baseline;
 
             gps_baseline.header.frame_id = driver->frame_id;
@@ -255,6 +267,8 @@ namespace swiftnav_ros {
             gps_baseline.fix_mode = sbp_ned.flags & 0b111;
 
             driver->baseline_pub.publish(gps_baseline);
+        } else {
+            ROS_DEBUG_STREAM("Problem: Got a Piksi Multi ned message with a bad time flag");
         }
         return;
     }
@@ -264,6 +278,8 @@ namespace swiftnav_ros {
             ROS_ERROR_STREAM("Critical Error: Pisk SBP driver vel_ned context void.");
             return;
         }
+
+        ROS_DEBUG_STREAM("Got a Piksi Multi vel_ned message");
 
         class PIKSI *driver = (class PIKSI *) context;
 
