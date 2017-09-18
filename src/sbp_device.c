@@ -8,7 +8,7 @@
 * Adapted from original Swift-Nav Piksi driver authored by:
 * Scott K Logan
 * Caleb Jamison
-* 
+*
 *
 * This is a standalone C driver for the Swift Navigation SBP Devices.
 *
@@ -119,6 +119,7 @@ static int baud2term( int baud )
 	case 230400:
 		return B230400;
 		break;
+#ifndef __APPLE__
 	case 460800:
 		return B460800;
 		break;
@@ -128,6 +129,7 @@ static int baud2term( int baud )
 	case 1000000:
 		return B1000000;
 		break;
+#endif
 	default:
 		return B0;
 		break;
@@ -208,7 +210,7 @@ int piksi_open( const char *port, int baud )
 
 	free_struct:
 		free( piksi_list[mydev] );
-	null_struct:	
+	null_struct:
 		piksi_list[mydev] = NULL;
 	close_mem_error:
 		close( fd );
@@ -233,4 +235,3 @@ int main()
 {
 	return 0;
 }
-

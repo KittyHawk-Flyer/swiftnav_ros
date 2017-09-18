@@ -4,7 +4,20 @@ project(swiftnav_ros)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS diagnostic_updater roscpp sensor_msgs std_srvs std_msgs kitty_common)
+find_package(catkin REQUIRED COMPONENTS
+            cmake_modules
+            diagnostic_updater
+            roscpp
+            rospy
+            rosbag
+            sensor_msgs
+            message_generation
+            std_srvs
+            std_msgs
+            kitty_common
+)
+
+find_package(Boost)
 
 ## System dependencies are found with CMake's conventions
 #find_package(swiftnav REQUIRED)
@@ -47,7 +60,7 @@ catkin_package(
    INCLUDE_DIRS include
    LIBRARIES sbp_device swiftnav_ros_driver
    CATKIN_DEPENDS diagnostic_updater roscpp sensor_msgs std_srvs
-#  DEPENDS system_lib
+   DEPENDS Boost
 )
 
 ###########
@@ -76,18 +89,21 @@ add_executable(swiftnav_ros_test src/sbp_device.c)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(sbp_device
+  ${catkin_LIBRARIES}
   ${SBP}
 )
 target_link_libraries(swiftnav_ros_test
+  ${catkin_LIBRARIES}
   ${SBP}
 )
 target_link_libraries(swiftnav_ros_driver
+  ${catkin_LIBRARIES}
   sbp
   sbp_device
 )
 target_link_libraries(swiftnav_ros_node
-  swiftnav_ros_driver
   ${catkin_LIBRARIES}
+  swiftnav_ros_driver
   kitty_common
 )
 
