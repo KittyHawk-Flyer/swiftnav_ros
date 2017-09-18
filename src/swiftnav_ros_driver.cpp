@@ -212,8 +212,8 @@ namespace swiftnav_ros {
             llh_msg->altitude = llh.height;
 
             // populate the covariance matrix
-            double h_covariance = llh.h_accuracy * llh.h_accuracy * 10e-6;
-            double v_covariance = llh.v_accuracy * llh.v_accuracy * 10e-6;
+            double h_covariance = llh.h_accuracy * llh.h_accuracy * 1.0e-6;
+            double v_covariance = llh.v_accuracy * llh.v_accuracy * 1.0e-6;
             llh_msg->position_covariance[0] = h_covariance;   // x = 0, 0
             llh_msg->position_covariance[4] = h_covariance;   // y = 1, 1
             llh_msg->position_covariance[8] = v_covariance;   // z = 2, 2
