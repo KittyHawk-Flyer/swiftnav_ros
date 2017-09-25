@@ -2,7 +2,7 @@
 
 In some other folder...
 ```
-git clone git@github.com:PaulBouchier/libsbp.git
+git clone https://github.com/swift-nav/libsbp.git
 cd libsbp/
 cd c/
 mkdir build
